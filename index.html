@@ -7,6 +7,8 @@
 <style>
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{ margin:0; padding:0; background:#081f4d; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; }
+  body{ opacity:0; transition:opacity .7s ease; }
+  body.loaded{ opacity:1; }
   .wrap{ position:relative; max-width:560px; margin:0 auto; cursor:pointer; }
   .flyer-img{ width:100%; display:block; -webkit-user-select:none; user-select:none; }
 
@@ -236,11 +238,23 @@
     }
   }
 
+  var fsRequested = false;
+  function tryHideAddressBar(){
+    if(fsRequested) return;
+    fsRequested = true;
+    var el = document.documentElement;
+    var req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+    if(req){
+      try{ req.call(el).catch(function(){}); }catch(err){}
+    }
+  }
+
   function handleTap(x, y){
     ripple(x, y);
     triggerFlash();
     spawnCoinBurst(x, y, 14);
     toggleAudio();
+    tryHideAddressBar();
   }
 
   tapArea.addEventListener('click', function(e){
@@ -253,9 +267,16 @@
     handleTap(r.left + r.width/2, r.top + r.height/2);
   });
 
-  // Try to start as soon as the page opens (works only where the browser's
-  // autoplay policy allows it; otherwise the first tap above starts it).
+  // As soon as the link is opened: fade the page in, nudge mobile browsers
+  // to tuck away their address bar, and fire the spark + attempt audio
+  // automatically (no tap needed) - sound only actually plays where the
+  // browser's autoplay policy allows it; otherwise the first tap above
+  // starts it.
   window.addEventListener('load', function(){
+    document.body.classList.add('loaded');
+    setTimeout(function(){ window.scrollTo(0, 1); }, 300);
+    triggerFlash();
+    spawnCoinBurst(window.innerWidth/2, window.innerHeight*0.55, 14);
     audio.play().catch(function(){});
   });
 
@@ -264,13 +285,25 @@
     window.location.href = 'tel:+91' + CALL_NUMBER;
   });
 
-  shareBtn.addEventListener('click', function(e){
+  shareBtn.addEventListener('click', async function(e){
     e.stopPropagation();
     var link = window.location.href;
-    var text = encodeURIComponent(
-      'देखिए ये शानदार गारंटीड इनकम प्लान 👇\nIndiaFirst Life Long Guaranteed Income Plan\n' + link
-    );
-    window.open('https://wa.me/?text=' + text, '_blank');
+    var caption = 'देखिए ये शानदार गारंटीड इनकम प्लान 👇\nIndiaFirst Life Long Guaranteed Income Plan\n' + link;
+    try{
+      var imgEl = document.querySelector('.flyer-img');
+      var resp = await fetch(imgEl.src);
+      var blob = await resp.blob();
+      var file = new File([blob], 'IndiaFirst-LGIP-Flyer.png', {type:'image/png'});
+      if(navigator.canShare && navigator.canShare({files:[file]})){
+        await navigator.share({
+          files:[file],
+          title:'IndiaFirst Life Long Guaranteed Income Plan',
+          text:caption
+        });
+        return;
+      }
+    }catch(err){}
+    window.open('https://wa.me/?text=' + encodeURIComponent(caption), '_blank');
   });
 
   // Shared view counter (best effort - needs the visitor's own internet
